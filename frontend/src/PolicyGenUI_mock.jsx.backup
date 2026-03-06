@@ -1,0 +1,741 @@
+import { useState, useEffect, useRef } from "react";
+// ✅ ADDED: Import API functions
+import { generatePolicy, evalRequest, simulate, parseYAML } from './api.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DESIGN SYSTEM — Industrial-precision. Crisp white base, deep teal accents.
+// Monospaced data, clean geometric structure. "Security audit meets modern SaaS."
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COLORS = {
+  bg: "#f4f6f9",
+  surface: "#ffffff",
+  surfaceHigh: "#eef2f7",
+  border: "#d8e2ed",
+  borderBright: "#b8cfe0",
+  accent: "#0a7c5c",
+  accentDim: "#0d9e76",
+  accentGlow: "rgba(10,124,92,0.08)",
+  accentMid: "#0bb882",
+  warn: "#c97c10",
+  danger: "#d63355",
+  dangerDim: "#fce8ed",
+  info: "#1a6fc4",
+};
+
+const ICONS = {
+  // SVG icon components (same as original - keeping them for brevity)
+  download: () => (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M6 1v7M3 5l3 3 3-3M2 10h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  check: () => (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M10 3L4.5 8.5 2 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  // ... (include all other icons from original)
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPONENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Spinner() {
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "2rem",
+    }}>
+      <div style={{
+        width: "32px",
+        height: "32px",
+        border: "3px solid " + COLORS.surfaceHigh,
+        borderTop: "3px solid " + COLORS.accent,
+        borderRadius: "50%",
+        animation: "spin 0.8s linear infinite",
+      }}/>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+function ErrorMessage({ message, onRetry }) {
+  return (
+    <div style={{
+      padding: "1.5rem",
+      background: COLORS.dangerDim,
+      border: `1px solid ${COLORS.danger}`,
+      borderRadius: "8px",
+      margin: "1rem 0",
+    }}>
+      <div style={{ color: COLORS.danger, fontWeight: 600, marginBottom: "0.5rem" }}>
+        Error
+      </div>
+      <div style={{ fontSize: "14px", marginBottom: "1rem" }}>
+        {message}
+      </div>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          style={{
+            padding: "8px 16px",
+            background: COLORS.danger,
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}
+        >
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function PolicyGenUI() {
+  // ── UI State ──
+  const [currentStep, setCurrentStep] = useState(0);
+  const [yamlInput, setYamlInput] = useState("");
+  
+  // ── API Data State ──
+  const [policyDraft, setPolicyDraft] = useState(null);
+  const [regoCode, setRegoCode] = useState("");
+  const [testsCode, setTestsCode] = useState("");
+  const [nistReport, setNistReport] = useState(null);
+  const [opaTestResults, setOpaTestResults] = useState(null);
+  const [simulationResults, setSimulationResults] = useState(null);
+  
+  // ── Loading & Error States ──
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // ── Step Navigation ──
+  const steps = [
+    { id: 0, label: "STRUCTURE", icon: "📝" },
+    { id: 1, label: "GENERATE", icon: "⚡" },
+    { id: 2, label: "REVIEW", icon: "🔍" },
+    { id: 3, label: "SIMULATE", icon: "🎯" },
+    { id: 4, label: "EXPORT", icon: "📦" },
+  ];
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ✅ FIXED: API HANDLERS - Actually call the backend
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const handleGeneratePolicy = async () => {
+    if (!yamlInput.trim()) {
+      setError("Please enter YAML policy definition");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // ✅ Call the actual backend API
+      const result = await generatePolicy(yamlInput);
+      
+      // ✅ Store the real data from backend
+      setPolicyDraft(result.draft);
+      setRegoCode(result.rego_code);
+      setTestsCode(result.tests_code);
+      setNistReport(result.nist_yaml);
+      setOpaTestResults(result.opa_tests);
+      
+      // Move to review step
+      setCurrentStep(2);
+    } catch (err) {
+      setError(err.message || "Failed to generate policy");
+      console.error("Generation error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRunSimulation = async () => {
+    if (!regoCode) {
+      setError("No Rego code available for simulation");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // ✅ Call the actual simulation API
+      const result = await simulate(regoCode, { n: 500, app: "demo_webapp" });
+      
+      // ✅ Store simulation results
+      setSimulationResults(result);
+      
+      // Move to export step
+      setCurrentStep(4);
+    } catch (err) {
+      setError(err.message || "Simulation failed");
+      console.error("Simulation error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEvaluateRequest = async (inputObj) => {
+    if (!regoCode) {
+      setError("No Rego code available for evaluation");
+      return null;
+    }
+
+    try {
+      // ✅ Call the actual eval API
+      const result = await evalRequest(regoCode, inputObj);
+      return result.decision;
+    } catch (err) {
+      console.error("Eval error:", err);
+      return null;
+    }
+  };
+
+  // ── Download Handlers ──
+  const downloadFile = (content, filename, mimeType = "text/plain") => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadRego = () => {
+    if (regoCode) {
+      downloadFile(regoCode, "policy.rego", "text/plain");
+    }
+  };
+
+  const handleDownloadYAML = () => {
+    if (yamlInput) {
+      downloadFile(yamlInput, "policy.yaml", "text/yaml");
+    }
+  };
+
+  const handleDownloadJSON = () => {
+    if (policyDraft) {
+      const json = JSON.stringify(policyDraft, null, 2);
+      downloadFile(json, "policy.json", "application/json");
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RENDER STEPS
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const renderStepContent = () => {
+    // Show loading spinner when API calls are in progress
+    if (isLoading) {
+      return (
+        <div style={{ textAlign: "center", padding: "3rem" }}>
+          <Spinner />
+          <div style={{ marginTop: "1rem", color: COLORS.accent, fontSize: "14px" }}>
+            {currentStep === 1 ? "Generating policy..." : "Running simulation..."}
+          </div>
+        </div>
+      );
+    }
+
+    // Show error if any
+    if (error) {
+      return (
+        <ErrorMessage 
+          message={error} 
+          onRetry={() => {
+            setError(null);
+            if (currentStep === 1) handleGeneratePolicy();
+            if (currentStep === 3) handleRunSimulation();
+          }}
+        />
+      );
+    }
+
+    switch (currentStep) {
+      case 0: // STRUCTURE - YAML Input
+        return (
+          <div style={{ padding: "2rem" }}>
+            <h2 style={{ fontSize: "20px", marginBottom: "1rem", color: COLORS.accent }}>
+              Define Your Policy
+            </h2>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "1.5rem" }}>
+              Write your access control policy in YAML format. Define roles, resources, and rules.
+            </p>
+            
+            <textarea
+              value={yamlInput}
+              onChange={(e) => setYamlInput(e.target.value)}
+              placeholder={`policy_id: my_policy_v1
+app: my_app
+description: "Access control policy"
+rules:
+  - rule_id: rule_1
+    name: "Allow admins"
+    condition: "user.role == 'admin'"
+    effect: allow`}
+              style={{
+                width: "100%",
+                minHeight: "300px",
+                padding: "1rem",
+                fontFamily: "IBM Plex Mono, monospace",
+                fontSize: "13px",
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: "8px",
+                resize: "vertical",
+              }}
+            />
+
+            <div style={{ marginTop: "1.5rem", display: "flex", gap: "1rem" }}>
+              <button
+                onClick={() => {
+                  setCurrentStep(1);
+                }}
+                disabled={!yamlInput.trim()}
+                style={{
+                  padding: "12px 24px",
+                  background: yamlInput.trim() ? COLORS.accent : COLORS.border,
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: yamlInput.trim() ? "pointer" : "not-allowed",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                }}
+              >
+                Next: Generate Policy
+              </button>
+            </div>
+          </div>
+        );
+
+      case 1: // GENERATE - Trigger generation
+        return (
+          <div style={{ padding: "2rem", textAlign: "center" }}>
+            <h2 style={{ fontSize: "20px", marginBottom: "1rem", color: COLORS.accent }}>
+              Ready to Generate
+            </h2>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "2rem" }}>
+              Click below to compile your YAML to Rego, run NIST compliance checks, and generate tests.
+            </p>
+            
+            <button
+              onClick={handleGeneratePolicy}
+              style={{
+                padding: "16px 32px",
+                background: COLORS.accent,
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "16px",
+                fontWeight: 600,
+              }}
+            >
+              Generate Policy
+            </button>
+
+            <button
+              onClick={() => setCurrentStep(0)}
+              style={{
+                marginLeft: "1rem",
+                padding: "16px 32px",
+                background: "transparent",
+                color: COLORS.accent,
+                border: `1px solid ${COLORS.accent}`,
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "16px",
+              }}
+            >
+              Back to YAML
+            </button>
+          </div>
+        );
+
+      case 2: // REVIEW - Show generated policy
+        return (
+          <div style={{ padding: "2rem" }}>
+            <h2 style={{ fontSize: "20px", marginBottom: "1rem", color: COLORS.accent }}>
+              Review Generated Policy
+            </h2>
+
+            {/* Rego Code */}
+            <div style={{ marginBottom: "2rem" }}>
+              <h3 style={{ fontSize: "16px", marginBottom: "0.5rem" }}>Rego Policy Code</h3>
+              <pre style={{
+                background: COLORS.surfaceHigh,
+                padding: "1rem",
+                borderRadius: "6px",
+                overflow: "auto",
+                maxHeight: "300px",
+                fontSize: "12px",
+                fontFamily: "IBM Plex Mono, monospace",
+              }}>
+                {regoCode || "No Rego code generated"}
+              </pre>
+            </div>
+
+            {/* NIST Report */}
+            {nistReport && (
+              <div style={{ marginBottom: "2rem" }}>
+                <h3 style={{ fontSize: "16px", marginBottom: "0.5rem" }}>NIST Compliance</h3>
+                <div style={{
+                  background: COLORS.surfaceHigh,
+                  padding: "1rem",
+                  borderRadius: "6px",
+                }}>
+                  <pre style={{ fontSize: "12px", margin: 0 }}>
+                    {JSON.stringify(nistReport, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* OPA Test Results */}
+            {opaTestResults && (
+              <div style={{ marginBottom: "2rem" }}>
+                <h3 style={{ fontSize: "16px", marginBottom: "0.5rem" }}>OPA Test Results</h3>
+                <div style={{
+                  background: COLORS.surfaceHigh,
+                  padding: "1rem",
+                  borderRadius: "6px",
+                }}>
+                  <pre style={{ fontSize: "12px", margin: 0 }}>
+                    {JSON.stringify(opaTestResults, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: "2rem", display: "flex", gap: "1rem" }}>
+              <button
+                onClick={() => setCurrentStep(3)}
+                style={{
+                  padding: "12px 24px",
+                  background: COLORS.accent,
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                }}
+              >
+                Next: Simulate
+              </button>
+              <button
+                onClick={() => setCurrentStep(1)}
+                style={{
+                  padding: "12px 24px",
+                  background: "transparent",
+                  color: COLORS.accent,
+                  border: `1px solid ${COLORS.accent}`,
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        );
+
+      case 3: // SIMULATE - Run simulation
+        return (
+          <div style={{ padding: "2rem", textAlign: "center" }}>
+            <h2 style={{ fontSize: "20px", marginBottom: "1rem", color: COLORS.accent }}>
+              Run Simulation
+            </h2>
+            <p style={{ fontSize: "14px", color: "#666", marginBottom: "2rem" }}>
+              Test your policy with 500 synthetic access requests to validate behavior.
+            </p>
+            
+            <button
+              onClick={handleRunSimulation}
+              style={{
+                padding: "16px 32px",
+                background: COLORS.accent,
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "16px",
+                fontWeight: 600,
+              }}
+            >
+              Run Simulation
+            </button>
+
+            <button
+              onClick={() => setCurrentStep(2)}
+              style={{
+                marginLeft: "1rem",
+                padding: "16px 32px",
+                background: "transparent",
+                color: COLORS.accent,
+                border: `1px solid ${COLORS.accent}`,
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "16px",
+              }}
+            >
+              Back to Review
+            </button>
+          </div>
+        );
+
+      case 4: // EXPORT - Download files
+        return (
+          <div style={{ padding: "2rem" }}>
+            <div style={{
+              background: "#e8f5e9",
+              padding: "1.5rem",
+              borderRadius: "8px",
+              marginBottom: "2rem",
+            }}>
+              <div style={{ fontSize: "16px", fontWeight: 600, color: "#2e7d32", marginBottom: "0.5rem" }}>
+                ✓ Policy Ready
+              </div>
+              <div style={{ fontSize: "14px", color: "#555" }}>
+                Your access control policy has been generated, reviewed, NIST-validated, and simulated. 
+                It is ready for export and deployment to your enforcement layer.
+              </div>
+            </div>
+
+            {/* Simulation Results */}
+            {simulationResults && (
+              <div style={{ marginBottom: "2rem" }}>
+                <h3 style={{ fontSize: "16px", marginBottom: "1rem" }}>Simulation Results</h3>
+                <div style={{
+                  background: COLORS.surfaceHigh,
+                  padding: "1rem",
+                  borderRadius: "6px",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "1rem",
+                }}>
+                  <div>
+                    <div style={{ fontSize: "12px", color: "#666" }}>Total Requests</div>
+                    <div style={{ fontSize: "24px", fontWeight: 600 }}>{simulationResults.total || 0}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "12px", color: "#666" }}>Allow Rate</div>
+                    <div style={{ fontSize: "24px", fontWeight: 600, color: COLORS.accent }}>
+                      {((simulationResults.allow_rate || 0) * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Download Options */}
+            <h3 style={{ fontSize: "16px", marginBottom: "1rem" }}>Export Options</h3>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
+              <div style={{
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: "8px",
+                padding: "1.5rem",
+              }}>
+                <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "0.5rem" }}>
+                  Rego Policy File
+                </div>
+                <div style={{ fontSize: "12px", color: "#666", marginBottom: "1rem" }}>
+                  Ready for OPA deployment. Compatible with Kong, Envoy, and API gateway integrations.
+                </div>
+                <button
+                  onClick={handleDownloadRego}
+                  disabled={!regoCode}
+                  style={{
+                    padding: "8px 16px",
+                    background: regoCode ? COLORS.accent : COLORS.border,
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: regoCode ? "pointer" : "not-allowed",
+                    fontSize: "13px",
+                    width: "100%",
+                  }}
+                >
+                  {ICONS.download()} Download .REGO
+                </button>
+              </div>
+
+              <div style={{
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: "8px",
+                padding: "1.5rem",
+              }}>
+                <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "0.5rem" }}>
+                  JSON Policy Export
+                </div>
+                <div style={{ fontSize: "12px", color: "#666", marginBottom: "1rem" }}>
+                  Structured explainability format. Each rule includes AI reasoning, NIST mapping, and audit metadata.
+                </div>
+                <button
+                  onClick={handleDownloadJSON}
+                  disabled={!policyDraft}
+                  style={{
+                    padding: "8px 16px",
+                    background: policyDraft ? COLORS.accent : COLORS.border,
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: policyDraft ? "pointer" : "not-allowed",
+                    fontSize: "13px",
+                    width: "100%",
+                  }}
+                >
+                  {ICONS.download()} Download .JSON
+                </button>
+              </div>
+
+              <div style={{
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: "8px",
+                padding: "1.5rem",
+              }}>
+                <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "0.5rem" }}>
+                  Policy YAML Source
+                </div>
+                <div style={{ fontSize: "12px", color: "#666", marginBottom: "1rem" }}>
+                  Human-editable source format. Re-import to regenerate or modify policy rules in future iterations.
+                </div>
+                <button
+                  onClick={handleDownloadYAML}
+                  disabled={!yamlInput}
+                  style={{
+                    padding: "8px 16px",
+                    background: yamlInput ? COLORS.accent : COLORS.border,
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: yamlInput ? "pointer" : "not-allowed",
+                    fontSize: "13px",
+                    width: "100%",
+                  }}
+                >
+                  {ICONS.download()} Download .YAML
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                // Reset to start over
+                setCurrentStep(0);
+                setYamlInput("");
+                setPolicyDraft(null);
+                setRegoCode("");
+                setNistReport(null);
+                setSimulationResults(null);
+              }}
+              style={{
+                padding: "12px 24px",
+                background: "transparent",
+                color: COLORS.accent,
+                border: `1px solid ${COLORS.accent}`,
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              Create New Policy
+            </button>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // MAIN RENDER
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: COLORS.bg,
+      fontFamily: "'Syne', sans-serif",
+    }}>
+      {/* Header */}
+      <div style={{
+        background: COLORS.surface,
+        borderBottom: `1px solid ${COLORS.border}`,
+        padding: "1.5rem 2rem",
+      }}>
+        <div style={{ fontSize: "20px", fontWeight: 700, color: COLORS.accent }}>
+          PolicyGenAI <span style={{ fontSize: "12px", fontWeight: 400, color: "#999" }}>ENTERPRISE</span>
+        </div>
+      </div>
+
+      {/* Step Progress */}
+      <div style={{
+        background: COLORS.surface,
+        padding: "2rem",
+        borderBottom: `1px solid ${COLORS.border}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: "800px", margin: "0 auto" }}>
+          {steps.map((step, idx) => (
+            <div key={step.id} style={{ display: "flex", alignItems: "center", flex: 1 }}>
+              <div style={{
+                width: "40px",
+                height: "40px",
+                borderRadius: "50%",
+                background: currentStep >= step.id ? COLORS.accent : COLORS.surfaceHigh,
+                color: currentStep >= step.id ? "white" : "#999",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "18px",
+                fontWeight: 600,
+              }}>
+                {currentStep > step.id ? ICONS.check() : step.id + 1}
+              </div>
+              <div style={{ marginLeft: "12px", flex: 1 }}>
+                <div style={{ fontSize: "11px", color: "#999", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  {step.label}
+                </div>
+              </div>
+              {idx < steps.length - 1 && (
+                <div style={{
+                  flex: 1,
+                  height: "2px",
+                  background: currentStep > step.id ? COLORS.accent : COLORS.border,
+                  margin: "0 1rem",
+                }}/>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ maxWidth: "900px", margin: "2rem auto", background: COLORS.surface, borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+        {renderStepContent()}
+      </div>
+
+      {/* Import Google Fonts */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Syne:wght@400;600;700;800&display=swap');
+      `}</style>
+    </div>
+  );
+}

@@ -1,0 +1,1010 @@
+import { useState, useEffect, useRef } from "react";
+// ✅ ADD: Import backend API functions
+import { generatePolicy, evalRequest, simulate } from './api.js';
+
+// ─── DESIGN SYSTEM ────────────────────────────────────────────────────────────
+// Aesthetic: Industrial-precision. Crisp white base, deep teal accents.
+// Monospaced data, clean geometric structure. "Security audit meets modern SaaS."
+
+const COLORS = {
+  bg: "#f4f6f9",
+  surface: "#ffffff",
+  surfaceHigh: "#eef2f7",
+  border: "#d8e2ed",
+  borderBright: "#b8cfe0",
+  accent: "#0a7c5c",
+  accentDim: "#0d9e76",
+  accentGlow: "rgba(10,124,92,0.08)",
+  accentMid: "#0bb882",
+  warn: "#c97c10",
+  danger: "#d63355",
+  dangerDim: "#fce8ed",
+  info: "#1a6fc4",
+  text: "#1a2b3c",
+  textMuted: "#5a7a95",
+  textDim: "#9ab0c4",
+  white: "#0f1e2d",
+};
+
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: ${COLORS.bg};
+    color: ${COLORS.text};
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: ${COLORS.surfaceHigh}; }
+  ::-webkit-scrollbar-thumb { background: ${COLORS.borderBright}; border-radius: 3px; }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(10,124,92,0.25); }
+    50% { box-shadow: 0 0 0 6px rgba(10,124,92,0); }
+  }
+
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  @keyframes progressFill {
+    from { width: 0%; }
+    to { width: 100%; }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .fade-slide-up { animation: fadeSlideUp 0.4s ease forwards; }
+  .fade-in { animation: fadeIn 0.3s ease forwards; }
+
+  .card {
+    background: ${COLORS.surface};
+    border: 1px solid ${COLORS.border};
+    border-radius: 2px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .card-high {
+    background: ${COLORS.surfaceHigh};
+    border: 1px solid ${COLORS.borderBright};
+    border-radius: 2px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  .btn {
+    border: 1px solid ${COLORS.border};
+    background: ${COLORS.surface};
+    color: ${COLORS.text};
+    font-size: 12px;
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .btn:hover:not(:disabled) {
+    border-color: ${COLORS.borderBright};
+    background: ${COLORS.surfaceHigh};
+  }
+
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: ${COLORS.accent};
+    border-color: ${COLORS.accent};
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: ${COLORS.accentDim};
+    border-color: ${COLORS.accentDim};
+  }
+
+  .btn-secondary {
+    background: ${COLORS.surfaceHigh};
+    border-color: ${COLORS.borderBright};
+    color: ${COLORS.text};
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: ${COLORS.border};
+  }
+
+  .btn-danger {
+    background: ${COLORS.danger};
+    border-color: ${COLORS.danger};
+    color: white;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: ${COLORS.textMuted};
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background: ${COLORS.surfaceHigh};
+    color: ${COLORS.text};
+  }
+
+  .input, .textarea {
+    width: 100%;
+    border: 1px solid ${COLORS.border};
+    background: ${COLORS.surface};
+    color: ${COLORS.text};
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 10px 12px;
+    border-radius: 2px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .input:focus, .textarea:focus { border-color: ${COLORS.accentDim}; }
+
+  .textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .select {
+    width: 100%;
+    border: 1px solid ${COLORS.border};
+    background: ${COLORS.surface};
+    color: ${COLORS.text};
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 10px 12px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    transition: border-color 0.15s;
+  }
+
+  .select:focus { border-color: ${COLORS.accentDim}; }
+
+  .label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: ${COLORS.textMuted};
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    color: ${COLORS.white};
+    letter-spacing: -0.01em;
+  }
+
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .syne { font-family: 'Syne', sans-serif; }
+
+  .divider {
+    height: 1px;
+    background: ${COLORS.border};
+    margin: 16px 0;
+  }
+
+  .step-connector {
+    width: 1px;
+    background: linear-gradient(to bottom, ${COLORS.border}, transparent);
+    margin: 0 auto;
+    flex: 1;
+  }
+
+  .nist-pass { color: ${COLORS.accent}; }
+  .nist-fail { color: ${COLORS.danger}; }
+
+  .rule-card {
+    border-left: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .rule-card:hover { border-color: ${COLORS.accentDim}; }
+  .rule-card.allow { border-left-color: ${COLORS.accentDim}; }
+  .rule-card.deny { border-left-color: ${COLORS.dangerDim}; }
+  .rule-card.rejected { border-left-color: ${COLORS.border}; opacity: 0.4; }
+  .rule-card.editing { border-left-color: ${COLORS.warn}; }
+
+  .progress-bar {
+    height: 2px;
+    background: ${COLORS.border};
+    border-radius: 1px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: ${COLORS.accent};
+    transition: width 0.4s ease;
+  }
+
+  .glow-text {
+    color: ${COLORS.accent};
+    text-shadow: none;
+  }
+
+  .terminal-line {
+    padding: 2px 0;
+    font-size: 11px;
+    color: ${COLORS.textMuted};
+    opacity: 0;
+    animation: fadeIn 0.2s ease forwards;
+  }
+
+  .terminal-line.success { color: ${COLORS.accent}; }
+  .terminal-line.warn { color: ${COLORS.warn}; }
+  .terminal-line.error { color: ${COLORS.danger}; }
+  .terminal-line.info { color: ${COLORS.info}; }
+
+  .cursor::after {
+    content: '|';
+    animation: blink 1s ease infinite;
+    color: ${COLORS.accentDim};
+  }
+
+  .checkbox-custom {
+    width: 16px;
+    height: 16px;
+    border: 1px solid ${COLORS.border};
+    border-radius: 2px;
+    background: ${COLORS.bg};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .checkbox-custom.checked {
+    background: ${COLORS.accent};
+    border-color: ${COLORS.accent};
+    color: white;
+  }
+
+  .tab {
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: ${COLORS.textMuted};
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tab.active {
+    color: ${COLORS.accent};
+    border-bottom-color: ${COLORS.accent};
+  }
+
+  .tab:hover:not(.active) {
+    color: ${COLORS.text};
+  }
+
+  .tooltip {
+    position: relative;
+  }
+
+  .sim-bar {
+    height: 8px;
+    border-radius: 1px;
+    background: ${COLORS.border};
+    overflow: hidden;
+  }
+
+  .sim-bar-fill {
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.8s ease;
+  }
+
+  .sim-bar-fill.allow { background: ${COLORS.accent}; }
+  .sim-bar-fill.deny { background: ${COLORS.danger}; }
+
+  /* Responsive Layout */
+  .main-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  @media (max-width: 768px) {
+    .main-container { padding: 16px; }
+    .section-title { font-size: 16px; }
+    .btn { font-size: 11px; padding: 6px 12px; }
+  }
+
+  @media (min-width: 1400px) {
+    .main-container { padding: 32px 48px; }
+  }
+`;
+
+// ─── ICONS ────────────────────────────────────────────────────────────────────
+const Icon = {
+  download: () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M2 10h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+  play: () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" fill="currentColor"/></svg>),
+  edit: () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2l2 2-6 6H2v-2l6-6z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>),
+  trash: () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 3h10M4 3V2h4v1M2 3l1 8h6l1-8M5 5v4M7 5v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+  info: () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.2"/><path d="M6 5.5v3M6 4.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>),
+  users: () => (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="5" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M1 12c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="10" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M12 12c0-1.5-.8-2.8-2-3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>),
+  building: () => (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 12v-10h8v10M5 4h2M5 7h2M10 6v6M12 8v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+  lock: () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="2" y="5" width="8" height="6" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M4 5V3.5C4 2.1 4.9 1 6 1s2 1.1 2 2.5V5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>),
+  shield: () => (<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l-5 2v3c0 3.5 2.5 6 5 7 2.5-1 5-3.5 5-7v-3l-5-2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>),
+  check: () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+  x: () => (<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>),
+};
+
+// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
+
+function ProgressBar({ value }) {
+  return (
+    <div className="progress-bar">
+      <div className="progress-fill" style={{ width: `${value}%` }} />
+    </div>
+  );
+}
+
+function StepIndicator({ steps, current }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {steps.map((label, idx) => (
+        <div key={idx} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: "50%",
+            background: idx <= current ? COLORS.accent : COLORS.surfaceHigh,
+            color: idx <= current ? "white" : COLORS.textMuted,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 11, fontWeight: 600, transition: "all 0.3s",
+          }}>
+            {idx < current ? <Icon.check /> : idx + 1}
+          </div>
+          {idx < steps.length - 1 && <div style={{ width: 16, height: 1, background: idx < current ? COLORS.accent : COLORS.border, transition: "all 0.3s" }} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <div style={{ width: 14, height: 14, border: `2px solid ${COLORS.surfaceHigh}`, borderTop: `2px solid ${COLORS.accent}`, borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} />
+  );
+}
+
+// ✅ ADDED: Global state to share data between steps
+const appState = {
+  yamlInput: "",
+  policyDraft: null,
+  regoCode: "",
+  testsCode: "",
+  nistReport: null,
+  opaTestResults: null,
+  simulationResults: null,
+};
+
+// ─── STEP 1: STRUCTURE ────────────────────────────────────────────────────────
+
+function Step1({ onNext }) {
+  const [yamlText, setYamlText] = useState(appState.yamlInput || `policy_id: webapp_basic_v1
+app: demo_webapp
+description: "Simple role-based access with time restrictions"
+
+rules:
+  - rule_id: rule_001
+    name: "Admin full access"
+    condition: "user.role == 'admin'"
+    effect: allow
+    
+  - rule_id: rule_002
+    name: "Users during business hours"
+    condition: "user.role == 'user' && time.hour >= 9 && time.hour < 17"
+    effect: allow
+    
+  - rule_id: rule_003
+    name: "Block suspicious IPs"
+    condition: "ip.reputation == 'suspicious'"
+    effect: deny
+
+examples:
+  - input:
+      user: { role: "admin" }
+    expected_allow: true
+    
+  - input:
+      user: { role: "user" }
+      time: { hour: 14 }
+    expected_allow: true`);
+
+  const handleNext = () => {
+    appState.yamlInput = yamlText;
+    onNext();
+  };
+
+  return (
+    <div className="card fade-slide-up" style={{ padding: 24 }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: COLORS.white }}>Policy Definition (YAML)</div>
+        <p style={{ fontSize: 11, color: COLORS.textMuted }}>
+          Define your access control policy in YAML format. Specify rules, conditions, and test examples.
+        </p>
+      </div>
+
+      <textarea
+        className="textarea"
+        value={yamlText}
+        onChange={e => setYamlText(e.target.value)}
+        style={{ 
+          minHeight: "calc(100vh - 400px)", 
+          maxHeight: "70vh",
+          fontFamily: "'IBM Plex Mono', monospace", 
+          fontSize: 12 
+        }}
+        placeholder="Enter your policy YAML here..."
+      />
+
+      <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+        <button className="btn btn-primary" onClick={handleNext} disabled={!yamlText.trim()}>
+          Next: Generate Policy
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── STEP 2: GENERATE ─────────────────────────────────────────────────────────
+
+function Step2({ onNext }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [logs, setLogs] = useState([]);
+
+  const addLog = (msg, type = "info") => {
+    setLogs(prev => [...prev, { msg, type, id: Date.now() }]);
+  };
+
+  // ✅ FIXED: Actually call the backend API
+  const handleGenerate = async () => {
+    if (!appState.yamlInput) {
+      setError("No YAML input found. Please go back to Step 1.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setLogs([]);
+
+    try {
+      addLog("📄 Parsing YAML structure...", "info");
+      await new Promise(r => setTimeout(r, 500));
+
+      addLog("🔄 Compiling to Rego policy...", "info");
+      await new Promise(r => setTimeout(r, 500));
+
+      addLog("🔐 Running NIST compliance checks...", "info");
+      await new Promise(r => setTimeout(r, 500));
+
+      addLog("🧪 Generating test cases...", "info");
+      await new Promise(r => setTimeout(r, 500));
+
+      addLog("✅ Calling backend API...", "info");
+      
+      // ✅ ACTUAL BACKEND CALL
+      const result = await generatePolicy(appState.yamlInput);
+
+      // ✅ STORE REAL DATA
+      appState.policyDraft = result.draft;
+      appState.regoCode = result.rego_code;
+      appState.testsCode = result.tests_code;
+      appState.nistReport = result.nist_yaml;
+      appState.opaTestResults = result.opa_tests;
+
+      addLog("✅ Policy generated successfully!", "success");
+      await new Promise(r => setTimeout(r, 800));
+
+      onNext();
+    } catch (err) {
+      console.error("Generation error:", err);
+      setError(err.message || "Failed to generate policy");
+      addLog(`❌ Error: ${err.message}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="card fade-slide-up" style={{ padding: 24 }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: COLORS.white }}>Generate Policy</div>
+        <p style={{ fontSize: 11, color: COLORS.textMuted }}>
+          Compile your YAML to Rego, run NIST compliance checks, and generate automated tests.
+        </p>
+      </div>
+
+      {error && (
+        <div style={{ padding: 16, background: COLORS.dangerDim, border: `1px solid ${COLORS.danger}`, borderRadius: 2, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: COLORS.danger, fontWeight: 600 }}>Error</div>
+          <div style={{ fontSize: 11, color: COLORS.danger, marginTop: 4 }}>{error}</div>
+        </div>
+      )}
+
+      {logs.length > 0 && (
+        <div className="card-high" style={{ padding: 16, marginBottom: 16, maxHeight: 200, overflowY: "auto" }}>
+          {logs.map((log, idx) => (
+            <div key={log.id} className={`terminal-line ${log.type}`} style={{ animationDelay: `${idx * 0.1}s` }}>
+              {log.msg}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 12 }}>
+        <button 
+          className="btn btn-primary" 
+          onClick={handleGenerate} 
+          disabled={loading}
+          style={{ flex: 1 }}
+        >
+          {loading ? <><Spinner /> Generating...</> : "Generate Policy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── STEP 3: REVIEW ───────────────────────────────────────────────────────────
+
+function Step3({ onNext }) {
+  const [activeTab, setActiveTab] = useState("rego");
+
+  return (
+    <div className="card fade-slide-up" style={{ padding: 24 }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: COLORS.white }}>Review Generated Policy</div>
+        <p style={{ fontSize: 11, color: COLORS.textMuted }}>
+          Review the compiled Rego code, NIST compliance report, and test results.
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ borderBottom: `1px solid ${COLORS.border}`, marginBottom: 16, display: "flex", gap: 4 }}>
+        <div className={`tab ${activeTab === "rego" ? "active" : ""}`} onClick={() => setActiveTab("rego")}>
+          Rego Code
+        </div>
+        <div className={`tab ${activeTab === "nist" ? "active" : ""}`} onClick={() => setActiveTab("nist")}>
+          NIST Report
+        </div>
+        <div className={`tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>
+          Test Results
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div style={{ maxHeight: "calc(100vh - 450px)", overflowY: "auto" }}>
+        {activeTab === "rego" && (
+          <pre className="card-high" style={{ padding: 16, fontSize: 11, overflow: "auto" }}>
+            {appState.regoCode || "No Rego code generated yet"}
+          </pre>
+        )}
+
+        {activeTab === "nist" && (
+          <div className="card-high" style={{ padding: 16, fontSize: 11 }}>
+            <pre>{JSON.stringify(appState.nistReport, null, 2) || "No NIST report available"}</pre>
+          </div>
+        )}
+
+        {activeTab === "tests" && (
+          <div className="card-high" style={{ padding: 16, fontSize: 11 }}>
+            <pre>{JSON.stringify(appState.opaTestResults, null, 2) || "No test results available"}</pre>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+        <button className="btn btn-primary" onClick={onNext}>
+          Next: Simulate
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── STEP 4: SIMULATE ─────────────────────────────────────────────────────────
+
+function Step4({ onNext }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [results, setResults] = useState(null);
+
+  // ✅ FIXED: Actually call the backend simulation API
+  const handleSimulate = async () => {
+    if (!appState.regoCode) {
+      setError("No Rego code available. Please generate a policy first.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // ✅ ACTUAL BACKEND CALL
+      const result = await simulate(appState.regoCode, { n: 500, app: "demo_webapp" });
+
+      // ✅ STORE REAL DATA
+      appState.simulationResults = result;
+      setResults(result);
+    } catch (err) {
+      console.error("Simulation error:", err);
+      setError(err.message || "Simulation failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="card fade-slide-up" style={{ padding: 24 }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: COLORS.white }}>Shadow-Mode Simulation</div>
+        <p style={{ fontSize: 11, color: COLORS.textMuted }}>
+          Test your policy with 500 synthetic requests to validate behavior before deployment.
+        </p>
+      </div>
+
+      {error && (
+        <div style={{ padding: 16, background: COLORS.dangerDim, border: `1px solid ${COLORS.danger}`, borderRadius: 2, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: COLORS.danger, fontWeight: 600 }}>Error</div>
+          <div style={{ fontSize: 11, color: COLORS.danger, marginTop: 4 }}>{error}</div>
+        </div>
+      )}
+
+      {results && (
+        <div className="card-high" style={{ padding: 20, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div>
+              <div style={{ fontSize: 10, color: COLORS.textMuted, marginBottom: 4 }}>TOTAL REQUESTS</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.white }}>{results.total || 0}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: COLORS.textMuted, marginBottom: 4 }}>ALLOW RATE</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: COLORS.accent }}>
+                {((results.allow_rate || 0) * 100).toFixed(1)}%
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 12 }}>
+        <button 
+          className="btn btn-primary" 
+          onClick={handleSimulate} 
+          disabled={loading}
+          style={{ flex: 1 }}
+        >
+          {loading ? <><Spinner /> Running Simulation...</> : <><Icon.play /> Run Simulation</>}
+        </button>
+        {results && (
+          <button className="btn btn-primary" onClick={onNext}>
+            Next: Export
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── STEP 5: EXPORT ───────────────────────────────────────────────────────────
+
+function Step5() {
+  const [downloaded, setDownloaded] = useState({ rego: false, json: false, yaml: false });
+
+  const downloadFile = (content, filename, type = "text/plain") => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownload = (format) => {
+    if (format === "rego" && appState.regoCode) {
+      downloadFile(appState.regoCode, "policy.rego");
+      setDownloaded(prev => ({ ...prev, rego: true }));
+    } else if (format === "json" && appState.policyDraft) {
+      downloadFile(JSON.stringify(appState.policyDraft, null, 2), "policy.json", "application/json");
+      setDownloaded(prev => ({ ...prev, json: true }));
+    } else if (format === "yaml" && appState.yamlInput) {
+      downloadFile(appState.yamlInput, "policy.yaml", "text/yaml");
+      setDownloaded(prev => ({ ...prev, yaml: true }));
+    }
+  };
+
+  return (
+    <div className="card fade-slide-up" style={{ padding: 24 }}>
+      {/* Success Banner */}
+      <div style={{ 
+        background: "#e8f5e9", 
+        padding: 20, 
+        borderRadius: 2, 
+        marginBottom: 24,
+        border: `1px solid ${COLORS.accent}`
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.accent, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon.check /> Policy Ready
+        </div>
+        <p style={{ fontSize: 11, color: "#555" }}>
+          Your access control policy has been generated, reviewed, NIST-validated, and simulated. 
+          It is ready for export and deployment to your enforcement layer.
+        </p>
+      </div>
+
+      {/* Simulation Results Summary */}
+      {appState.simulationResults && (
+        <div className="card-high" style={{ padding: 16, marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 12, color: COLORS.white }}>Simulation Results</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 9, color: COLORS.textMuted }}>Total Requests</div>
+              <div style={{ fontSize: 20, fontWeight: 600 }}>{appState.simulationResults.total || 0}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: COLORS.textMuted }}>Allow Rate</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: COLORS.accent }}>
+                {((appState.simulationResults.allow_rate || 0) * 100).toFixed(1)}%
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: COLORS.white }}>Export & Deploy</div>
+        <p style={{ fontSize: 11, color: COLORS.textMuted, marginBottom: 16 }}>
+          Export in multiple formats. Integrate with your enforcement layer.
+        </p>
+      </div>
+
+      {/* Download Options */}
+      <div style={{ display: "grid", gap: 12 }}>
+        {/* Rego */}
+        <div className="card-high" style={{ padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Rego Policy File <span style={{ fontSize: 10, color: COLORS.textMuted }}>.REGO</span></div>
+              <p style={{ fontSize: 10, color: COLORS.textMuted }}>
+                Ready for OPA deployment. Compatible with Kong, Envoy, and API gateway integrations.
+              </p>
+            </div>
+          </div>
+          <button 
+            className="btn btn-primary" 
+            onClick={() => handleDownload("rego")}
+            disabled={!appState.regoCode}
+            style={{ width: "100%" }}
+          >
+            {downloaded.rego ? <><Icon.check /> Downloaded</> : <><Icon.download /> Download .REGO</>}
+          </button>
+        </div>
+
+        {/* JSON */}
+        <div className="card-high" style={{ padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>JSON Policy Export <span style={{ fontSize: 10, color: COLORS.textMuted }}>.JSON</span></div>
+              <p style={{ fontSize: 10, color: COLORS.textMuted }}>
+                Structured explainability format. Each rule includes AI reasoning, NIST mapping, and audit metadata.
+              </p>
+            </div>
+          </div>
+          <button 
+            className="btn btn-primary" 
+            onClick={() => handleDownload("json")}
+            disabled={!appState.policyDraft}
+            style={{ width: "100%" }}
+          >
+            {downloaded.json ? <><Icon.check /> Downloaded</> : <><Icon.download /> Download .JSON</>}
+          </button>
+        </div>
+
+        {/* YAML */}
+        <div className="card-high" style={{ padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Policy YAML Source <span style={{ fontSize: 10, color: COLORS.textMuted }}>.YAML</span></div>
+              <p style={{ fontSize: 10, color: COLORS.textMuted }}>
+                Human-editable source format. Re-import to regenerate or modify policy rules in future iterations.
+              </p>
+            </div>
+          </div>
+          <button 
+            className="btn btn-primary" 
+            onClick={() => handleDownload("yaml")}
+            disabled={!appState.yamlInput}
+            style={{ width: "100%" }}
+          >
+            {downloaded.yaml ? <><Icon.check /> Downloaded</> : <><Icon.download /> Download .YAML</>}
+          </button>
+        </div>
+      </div>
+
+      {/* Integration Guidance */}
+      <div className="card-high" style={{ padding: 16, marginTop: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8, color: COLORS.white }}>INTEGRATION GUIDANCE</div>
+        <ol style={{ fontSize: 10, color: COLORS.textMuted, paddingLeft: 20, lineHeight: 1.6 }}>
+          <li>Deploy OPA as a sidecar or policy server in your infrastructure</li>
+          <li>Load the generated policy.rego into OPA using bundle API or file mount</li>
+          <li>Route authorization decisions from your app to OPA via REST endpoint</li>
+          <li>Use the JSON export for audit logging — each decision is fully traceable</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD (MOCK) ─────────────────────────────────────────────────────────
+
+function Dashboard({ onBack }) {
+  return (
+    <div className="card fade-slide-up" style={{ padding: 24 }}>
+      <p style={{ fontSize: 12, color: COLORS.textMuted }}>
+        Dashboard view - showing all generated policies and their status.
+      </p>
+      <button className="btn btn-secondary" style={{ marginTop: 16 }} onClick={onBack}>
+        Back to Wizard
+      </button>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [view, setView] = useState("wizard"); // "wizard" | "dashboard"
+  const [step, setStep] = useState(0);
+
+  const STEPS = ["Structure", "Generate", "Review", "Simulate", "Export"];
+
+  const goNext = () => {
+    setStep(s => Math.min(4, s + 1));
+  };
+
+  const resetWizard = () => {
+    setStep(0);
+    setView("wizard");
+    // Reset app state
+    Object.keys(appState).forEach(key => {
+      appState[key] = key === "yamlInput" ? "" : null;
+    });
+  };
+
+  return (
+    <>
+      <style>{css}</style>
+      <div style={{ minHeight: "100vh", background: COLORS.bg }}>
+
+        {/* NAV */}
+        <nav style={{
+          borderBottom: `1px solid ${COLORS.border}`,
+          padding: "0 32px",
+          height: 52,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          position: "sticky",
+          top: 0,
+          background: COLORS.surface,
+          zIndex: 100,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ color: COLORS.accent }}><Icon.shield /></div>
+            <span style={{ fontFamily: "Syne, sans-serif", fontWeight: 800, fontSize: 14, color: COLORS.white, letterSpacing: "0.02em" }}>
+              PolicyGen<span style={{ color: COLORS.accent }}>AI</span>
+            </span>
+            <span style={{ fontSize: 9, color: COLORS.textDim, letterSpacing: "0.08em", marginLeft: 4 }}>ENTERPRISE</span>
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {["wizard", "dashboard"].map(v => (
+              <button
+                key={v}
+                className={`btn ${view === v ? "btn-secondary" : "btn-ghost"}`}
+                style={{ padding: "6px 14px" }}
+                onClick={() => { setView(v); if (v === "wizard") setStep(0); }}
+              >
+                {v === "wizard" ? "New Policy" : "Dashboard"}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        <div className="main-container">
+
+          {view === "dashboard" ? (
+            <>
+              <div style={{ marginBottom: 24 }}>
+                <div className="section-title" style={{ marginBottom: 4 }}>Policy Dashboard</div>
+                <p style={{ fontSize: 11, color: COLORS.textMuted }}>Monitor all generated policies, NIST scores, and deployment status.</p>
+              </div>
+              <Dashboard onBack={() => { setView("wizard"); setStep(0); }} />
+            </>
+          ) : (
+            <>
+              {/* WIZARD HEADER */}
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 16 }}>
+                  <div>
+                    <div className="section-title" style={{ marginBottom: 4 }}>
+                      {["Define Policy Structure", "Generating Policy", "Review & Edit Rules", "Simulation & Validation", "Export & Deploy"][step]}
+                    </div>
+                    <p style={{ fontSize: 11, color: COLORS.textMuted }}>
+                      {[
+                        "Define your access control policy in YAML format.",
+                        "The AI is analyzing your input and generating the Rego policy.",
+                        "Review the generated policy code and compliance reports.",
+                        "Validate behavior with shadow-mode simulation before going live.",
+                        "Export in multiple formats. Integrate with your enforcement layer.",
+                      ][step]}
+                    </p>
+                  </div>
+                  <StepIndicator steps={STEPS} current={step} />
+                </div>
+                <ProgressBar value={(step / 4) * 100} />
+              </div>
+
+              {/* WIZARD CONTENT */}
+              {step === 0 && <Step1 onNext={goNext} />}
+              {step === 1 && <Step2 onNext={goNext} />}
+              {step === 2 && <Step3 onNext={goNext} />}
+              {step === 3 && <Step4 onNext={goNext} />}
+              {step === 4 && <Step5 />}
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
