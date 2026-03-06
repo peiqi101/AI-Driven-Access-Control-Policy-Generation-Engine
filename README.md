@@ -55,7 +55,3 @@ project/
 - `POST /api/eval` - Evaluate access request
 - `POST /api/simulate` - Run shadow-mode simulation
 - `GET /api/health` - Health check
-
-## 📝 License
-
-MIT License
